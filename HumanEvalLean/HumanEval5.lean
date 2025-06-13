@@ -1,5 +1,15 @@
-def intersperse : Unit :=
-  ()
+example : [].intersperse 7 = []                              := rfl
+example : [5, 6, 3, 2].intersperse 8 = [5, 8, 6, 8, 3, 8, 2] := rfl
+example : [2, 2, 2].intersperse 2 = [2, 2, 2, 2, 2]          := rfl
+
+open List
+
+#check length_intersperse
+#check getElem?_intersperse_two_mul
+#check getElem?_intersperse_two_mul_add_one
+#check getElem_intersperse_two_mul
+#check getElem_intersperse_two_mul_add_one
+#check getElem_eq_getElem_intersperse_two_mul
 
 /-!
 ## Prompt
