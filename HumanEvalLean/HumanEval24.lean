@@ -31,16 +31,13 @@ theorem largestDivisorSpec_go {n i : Nat} (hi : 2 ≤ i)
     (hi' : ∀ j, 2 ≤ j → j < i → n % j ≠ 0) : LargestDivisorSpec n (largestDivisor.go n i) := by
   fun_induction largestDivisor.go n i
   case case1 i hni =>
-    rw [largestDivisor.go, dif_pos hni]
     apply LargestDivisorSpec.one
     intro j hj hj'
     apply hi' _ hj
     exact Nat.mul_self_lt_mul_self_iff.1 (Nat.lt_of_le_of_lt hj' hni)
   case case2 i hni hni' =>
-    rw [largestDivisor.go, dif_neg hni, if_pos hni']
     exact LargestDivisorSpec.div hi' hi hni'
   case case3 i hni hni' ih =>
-    rw [largestDivisor.go, dif_neg hni, if_neg hni']
     apply ih (by omega)
     intro j hj hij
     by_cases hij' : j = i
