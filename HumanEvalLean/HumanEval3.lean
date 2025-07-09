@@ -1,5 +1,44 @@
 import Std.Tactic.Do
 
+namespace List
+
+structure HasPrefix (P : List α → Prop) (l : List α) : Prop where
+  exists_take : ∃ n, P (l.take n)
+
+theorem hasPrefix_iff {P : List α → Prop} {l : List α} :
+    l.HasPrefix P ↔ ∃ n, P (l.take n) := by
+  grind [HasPrefix]
+
+@[simp, grind]
+theorem hasPrefix_nil {P : List α → Prop} : [].HasPrefix P ↔ P [] := by
+  simp [hasPrefix_iff]
+
+@[simp, grind]
+theorem hasPrefix_of_nil {P : List α → Prop} {l : List α} (h : P []) : l.HasPrefix P :=
+  ⟨⟨0, by simpa⟩⟩
+
+@[simp, grind]
+theorem hasPrefix_of_all {P : List α → Prop} {l : List α} (h : P l) : l.HasPrefix P :=
+  ⟨⟨l.length, by simpa⟩⟩
+
+@[grind]
+theorem hasPrefix_cons {P : List α → Prop} {a : α} {l : List α} :
+    (a :: l).HasPrefix P ↔ P [] ∨ l.HasPrefix (fun l' => P (a :: l')) := by
+  refine ⟨?_, ?_⟩
+  · rintro ⟨⟨n, hn⟩⟩
+    refine (Nat.eq_zero_or_pos n).elim (by rintro rfl; simp_all) (fun hnp => Or.inr ⟨⟨n - 1, ?_⟩⟩)
+    rwa [take_cons hnp] at hn
+  · rintro (h|⟨⟨n, hn⟩⟩)
+    · exact hasPrefix_of_nil h
+    · exact ⟨n + 1, by simpa⟩
+
+@[grind]
+theorem hasPrefix_append {P : List α → Prop} {l l' : List α} :
+    (l ++ l').HasPrefix P ↔ l.HasPrefix P ∨ l'.HasPrefix (fun l'' => P (l ++ l'')) := by
+  induction l generalizing P with grind
+
+end List
+
 def belowZero (l : List Int) : Bool :=
   go 0 l
 where
@@ -14,18 +53,8 @@ where
 theorem belowZero_iff {l : List Int} : belowZero l ↔ ∃ n, (l.take n).sum < 0 := by
   suffices ∀ c, belowZero.go c l ↔ ∃ n, c + (l.take n).sum < 0 by simpa using this 0
   intro c
-  induction l generalizing c with
-  | nil => simp [belowZero.go]
-  | cons h t ih =>
-    simp only [belowZero.go, Bool.if_true_left, Bool.or_eq_true, decide_eq_true_eq, ih]
-    refine ⟨?_, ?_⟩
-    · rintro (hc|⟨n, hn⟩)
-      · exact ⟨0, by simpa⟩
-      · exact ⟨n + 1, by simpa [← Int.add_assoc]⟩
-    · rintro ⟨n, hn⟩
-      rcases n with (_|n)
-      · exact Or.inl (by simpa using hn)
-      · exact Or.inr ⟨n, by simpa [Int.add_assoc] using hn⟩
+  rw [← List.hasPrefix_iff (P := fun l => c + l.sum < 0)]
+  fun_induction belowZero.go with grind
 
 def doBelowZero (operations : List Int) : Bool := Id.run do
   let mut balance := 0
@@ -40,7 +69,7 @@ set_option mvcgen.warning false
 
 attribute [simp] Std.List.Zipper.pref
 
-@[grind]
+@[simp, grind]
 theorem List.sum_append_singleton {x : Int} {l : List Int} : (l ++ [x]).sum = l.sum + x := by
   simp [List.sum, ← List.foldr_assoc]
 
@@ -56,6 +85,8 @@ abbrev InvWithEarlyReturn
    onContinue.2⟩
 
 theorem doBelowZero_iff {l : List Int} : doBelowZero l ↔ ∃ n, (l.take n).sum < 0 := by
+  rw [← List.hasPrefix_iff (P := fun l => l.sum < 0)]
+
   generalize h : doBelowZero l = res
   apply Id.by_wp h
   mvcgen
@@ -64,20 +95,11 @@ theorem doBelowZero_iff {l : List Int} : doBelowZero l ↔ ∃ n, (l.take n).sum
 --    ∨ (r = some true ∧ l = xs.pref ∧ ∃ n, (l.take n).sum < 0)
   case inv =>
     exact InvWithEarlyReturn
-      (⇓ (bal, xs) => bal = xs.pref.sum ∧ ∀ n, (xs.pref.take n).sum ≥ 0)
-      (fun r bal => r = true ∧ ∃ n, (l.take n).sum < 0)
-  all_goals simp_all
+      (⇓ (bal, xs) => bal = xs.pref.sum ∧ ¬ xs.pref.HasPrefix (fun l => l.sum < 0))
+      (fun r bal => r = true ∧ l.HasPrefix (fun l => l.sum < 0))
+
+  all_goals simp_all [List.hasPrefix_cons, List.hasPrefix_append]
   all_goals try grind
-  · exists rpref.reverse.length + 1
-    simp_all only [List.sum, List.take_length_add_append, List.take_succ_cons, List.take_zero, List.foldr_append,
-      List.foldr_cons, List.foldr_nil, Int.add_zero, ← List.foldr_assoc (α:=Int) (op:=(·+·)), Int.zero_add]
-  · refine ⟨by grind, ?_⟩
-    intro n
-    have := h.2.2 n
-    by_cases rpref.reverse.length + 1 ≤ n
-    · grind
-    · have : n - rpref.length = 0 := by grind
-      grind
 
 /-!
 ## Prompt
