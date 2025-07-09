@@ -1,3 +1,5 @@
+import Std.Tactic.Do
+
 def belowZero (l : List Int) : Bool :=
   go 0 l
 where
@@ -24,6 +26,58 @@ theorem belowZero_iff {l : List Int} : belowZero l ↔ ∃ n, (l.take n).sum < 0
       rcases n with (_|n)
       · exact Or.inl (by simpa using hn)
       · exact Or.inr ⟨n, by simpa [Int.add_assoc] using hn⟩
+
+def doBelowZero (operations : List Int) : Bool := Id.run do
+  let mut balance := 0
+  for op in operations do
+    balance := balance + op
+    if balance < 0 then
+      return true
+  return false
+
+open Std.Do
+set_option mvcgen.warning false
+
+attribute [simp] Std.List.Zipper.pref
+
+@[grind]
+theorem List.sum_append_singleton {x : Int} {l : List Int} : (l ++ [x]).sum = l.sum + x := by
+  simp [List.sum, ← List.foldr_assoc]
+
+attribute [grind =] List.take_append List.take_left' List.take_length List.take_of_length_le
+
+abbrev InvWithEarlyReturn
+  (onContinue : PostCond (β × Std.List.Zipper l) ps)
+  (onReturn : ρ → β → Assertion ps) :
+    PostCond (MProd (Option ρ) β × Std.List.Zipper l) ps :=
+  ⟨fun (⟨x, b⟩, xs) => spred(
+        (⌜x = none⌝ ∧ onContinue.1 ⟨b, xs⟩)
+      ∨ (∃ r, ⌜x = some r⌝ ∧ ⌜l = xs.pref⌝ ∧ onReturn r b)),
+   onContinue.2⟩
+
+theorem doBelowZero_iff {l : List Int} : doBelowZero l ↔ ∃ n, (l.take n).sum < 0 := by
+  generalize h : doBelowZero l = res
+  apply Id.by_wp h
+  mvcgen
+--  case inv => exact ⇓ (⟨r, bal⟩, xs) =>
+--      (r = none ∧ bal = xs.pref.sum ∧ ∀ n, (xs.pref.take n).sum ≥ 0)
+--    ∨ (r = some true ∧ l = xs.pref ∧ ∃ n, (l.take n).sum < 0)
+  case inv =>
+    exact InvWithEarlyReturn
+      (⇓ (bal, xs) => bal = xs.pref.sum ∧ ∀ n, (xs.pref.take n).sum ≥ 0)
+      (fun r bal => r = true ∧ ∃ n, (l.take n).sum < 0)
+  all_goals simp_all
+  all_goals try grind
+  · exists rpref.reverse.length + 1
+    simp_all only [List.sum, List.take_length_add_append, List.take_succ_cons, List.take_zero, List.foldr_append,
+      List.foldr_cons, List.foldr_nil, Int.add_zero, ← List.foldr_assoc (α:=Int) (op:=(·+·)), Int.zero_add]
+  · refine ⟨by grind, ?_⟩
+    intro n
+    have := h.2.2 n
+    by_cases rpref.reverse.length + 1 ≤ n
+    · grind
+    · have : n - rpref.length = 0 := by grind
+      grind
 
 /-!
 ## Prompt
